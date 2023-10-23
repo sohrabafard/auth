@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'guard' => 'web',
+    'guard' => 'api',
 
     /*
     |--------------------------------------------------------------------------
@@ -25,6 +25,7 @@ return [
     | can be set via environment variables when that is more convenient.
     |
     */
+//TODO: Change encryption keys path & locate from .env
 
     'private_key' => env('PASSPORT_PRIVATE_KEY'),
 

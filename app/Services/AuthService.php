@@ -1,36 +1,38 @@
 <?php
 
 namespace App\Services;
-
-use App\Models\Google2FASecret;
 use App\Models\User;
 use App\Http\Resources\v1\UserResource;
+use App\Repositories\Google2FASecretRepository;
+use App\Repositories\UserRepository;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\JsonResponse;
-use PragmaRX\Google2FA\Google2FA;
 
 class AuthService
 {
-    protected Google2FA $google2fa;
 
-    public function __construct(Google2FA $google2fa)
+    private UserRepository $userRepository;
+    private Google2FASecretRepository $google2FASecretRepository;
+
+    public function __construct(UserRepository $userRepository, Google2FASecretRepository $google2FASecretRepository)
     {
-        $this->google2fa = $google2fa;
+        $this->userRepository = $userRepository;
+        $this->google2FASecretRepository = $google2FASecretRepository;
     }
 
     public function registerUser(array $data): User
     {
-        // Validation and other pre-processing can be done here
-        $data['password'] = bcrypt($data['password']);
-        $user = User::create($data);
+        $data['password'] = Hash::make($data['password']);  // Using Hash facade
+        $user = $this->userRepository->create($data);
 
-        // Generate Google 2FA secret for the user
-        $google2fa_secret = $this->google2fa->generateSecretKey();
+        $google2fa_secret = $this->google2FASecretRepository->generateSecretKey();
 
-        // Store the secret associated with the user
-        Google2FASecret::create([
+        // Encrypt the secret before storing
+        $encrypted_secret = encrypt($google2fa_secret);
+
+        $this->google2FASecretRepository->create([
             'user_id' => $user->id,
-            'google2fa_secret' => $google2fa_secret,
+            'google2fa_secret' => $encrypted_secret,
         ]);
 
         return $user;
@@ -38,22 +40,12 @@ class AuthService
 
     public function verifyTOTP(User $user, string $oneTimePassword): bool
     {
-        $latestGoogle2FASecret = Google2FASecret::getLatestForUser($user);
-
-        if (!$latestGoogle2FASecret) {
-            // No 2FA secret found for the user
-            return false;
-        }
-
-        return $this->google2fa->verifyKey(
-            $latestGoogle2FASecret->google2fa_secret,
-            $oneTimePassword
-        );
+        return $this->google2FASecretRepository->verifyKeyForUser($user, $oneTimePassword);
     }
 
     public function login(array $data): array
     {
-        $user = User::where('email', $data['email'])->first();
+        $user = $this->userRepository->findByEmail($data['email']);
         $response = [
             'user' => null,
             'requires_2fa' => false,
@@ -86,6 +78,6 @@ class AuthService
     // Add to AuthService.php
     public function requires2FA(User $user): bool
     {
-        return Google2FASecret::where('user_id', $user->id)->exists();
+        return $this->google2FASecretRepository->existsForUser($user);
     }
 }

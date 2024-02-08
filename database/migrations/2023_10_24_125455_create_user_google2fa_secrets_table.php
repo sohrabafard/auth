@@ -13,7 +13,11 @@ return new class extends Migration
     {
         Schema::create('user_google2fa_secrets', function (Blueprint $table) {
             $table->id();
+            $table->unsignedBigInteger('user_id')->index();
+            $table->string('google2fa_secret');
             $table->timestamps();
+
+            $table->foreign('user_id')->references('id')->on('users');
         });
     }
 
